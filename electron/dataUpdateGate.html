@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Veri Güncellemesi</title>
+  <link rel="stylesheet" href="main.css">
+  <style>
+    #progress.indeterminate { width: 35%; animation: data-progress 1.2s ease-in-out infinite alternate; }
+    @keyframes data-progress { from { transform: translateX(0); } to { transform: translateX(185%); } }
+  </style>
+</head>
+<body class="gate gate-update">
+  <main>
+    <div class="icon">↻</div>
+    <h1 id="title">Veri güncelleniyor</h1>
+    <p id="detail">İlaç kataloğu ve güvenlik bilgileri hazırlanıyor. Lütfen bekleyin.</p>
+    <div class="progress-wrap"><div id="progress"></div></div>
+    <div class="meta"><span id="percent"></span></div>
+    <p class="footnote">Güncelleme tamamlanana kadar bu pencereyi kapatmayın.</p>
+  </main>
+  <script src="dataUpdateGate.js"></script>
+</body>
+</html>

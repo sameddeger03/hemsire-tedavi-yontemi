@@ -1,0 +1,88 @@
+{
+  "name": "client",
+  "version": "1.1.5",
+  "description": "Hemşireler için tedavi yönetimi uygulaması. Ücretsiz ve bağımsız.",
+  "main": "electron/main.js",
+  "build": {
+    "appId": "com.sd.tedavi-yonetimi",
+    "productName": "Hemşire Tedavi Yönetimi",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "electron/**",
+      "printer/**",
+      "shared/*.js",
+      "build/icon.ico",
+      "build/icon.png",
+      "package.json"
+    ],
+    "afterPack": "scripts/verify-package.js",
+    "afterAllArtifactBuild": "scripts/cleanup-release.js",
+    "win": {
+      "icon": "build/icon.ico",
+      "target": "nsis"
+    },
+    "appx": {
+      "identityName": "SamedDeer.HemireTedaviYnetimi",
+      "publisher": "CN=ABC03F4F-0558-4C90-9D76-AD94D2846FD0",
+      "publisherDisplayName": "Samed Değer",
+      "applicationId": "HemsireTedaviYonetimi",
+      "displayName": "Hemşire Tedavi Yönetimi",
+      "languages": [
+        "tr-TR"
+      ]
+    },
+    "nsis": {
+      "perMachine": true,
+      "include": "build/installer.nsh",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://updates.invalid/client"
+      }
+    ]
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "jest --runInBand",
+    "icon": "node scripts/generate-icon.js",
+    "electron:dev": "node scripts/kill-app.js && node scripts/generate-icon.js && concurrently --kill-others --success first --names VITE,ELECTRON --prefix-colors cyan,magenta \"vite\" \"wait-on http://localhost:5173 && set VITE_DEV_SERVER_URL=http://localhost:5173&& electron .\"",
+    "electron:dev:background": "set \"REMINDER_BACKGROUND_TEST=1\"&& npm run electron:dev",
+    "electron:dev:auth": "set \"STARTUP_TEST_MODE=auth\"&& npm run electron:dev",
+    "electron:dev:update": "set \"STARTUP_TEST_MODE=update\"&& npm run electron:dev",
+    "electron:dev:preload": "set \"STARTUP_TEST_MODE=preload\"&& npm run electron:dev",
+    "electron:dev:offline": "set \"STARTUP_TEST_MODE=offline\"&& npm run electron:dev",
+    "electron:dev:quit": "set \"STARTUP_TEST_MODE=quit\"&& npm run electron:dev",
+    "electron:reset": "node scripts/reset-app-data.js",
+    "electron:build": "node scripts/generate-icon.js && vite build && electron-builder",
+    "electron:build:store": "node scripts/generate-icon.js && vite build && electron-builder --win appx --x64"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@lucide/vue": "^1.21.0",
+    "electron-log": "^5.4.4",
+    "electron-updater": "^6.8.9",
+    "sql.js": "^1.14.1",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@emnapi/core": "^1.11.3",
+    "@emnapi/runtime": "^1.11.3",
+    "@vitejs/plugin-vue": "^5.2.3",
+    "concurrently": "^9.1.2",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3",
+    "jest": "^30.4.2",
+    "sharp": "^0.35.2",
+    "vite": "^6.3.2",
+    "wait-on": "^8.0.3"
+  }
+}

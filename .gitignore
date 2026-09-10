@@ -1,0 +1,16 @@
+node_modules/
+dist/
+release/
+build/appx/
+
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+.env
+logs/
+backups/
+
+.DS_Store
+Thumbs.db
+*.exe

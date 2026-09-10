@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Güncelleme Kontrolü</title>
+  <link rel="stylesheet" href="main.css">
+</head>
+<body class="gate gate-update">
+  <main>
+    <div class="icon">
+	<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-big-down-dash-icon lucide-arrow-big-down-dash"><path d="M14 8a1 1 0 0 1 1 1v2a1 1 0 0 0 1 1h3.293a.707.707 0 0 1 .5 1.207l-6.939 6.939a1.207 1.207 0 0 1-1.708 0l-6.94-6.94a.707.707 0 0 1 .5-1.206H8a1 1 0 0 0 1-1V9a1 1 0 0 1 1-1z"/><path d="M9 4h6"/></svg>
+	</div>
+    <h1 id="title">Güncelleme kontrol ediliyor</h1>
+    <p id="detail">Lütfen bekleyin. Uygulamanın en güncel sürümü aranıyor.</p>
+    <div class="progress-wrap"><div id="progress"></div></div>
+    <div class="meta"><span id="percent">0%</span><span id="speed"></span></div>
+    <p class="footnote">Kurulum otomatik başlayacaktır.</p>
+  </main>
+  <script src="updateGate.js"></script>
+</body>
+</html>

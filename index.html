@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="__CSP_PLACEHOLDER__">
+    <title>Hemşire Tedavi Yönetimi by SD</title>
+    <style>
+      #app-loading {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(160deg, #7C5CBF 0%, #6A4DA8 55%, #58409A 100%);
+        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        transition: opacity .35s ease;
+      }
+      #app-loading.app-loading-done {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .app-loading-inner {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 18px;
+      }
+      .app-loading-spinner {
+        position: relative;
+        width: 88px;
+        height: 88px;
+        display: grid;
+        place-items: center;
+      }
+      .app-loading-spinner::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        border: 4px solid rgba(255, 255, 255, .22);
+        border-top-color: #fff;
+        animation: app-loading-spin 1s linear infinite;
+      }
+      .app-loading-spinner::after {
+        content: "";
+        position: absolute;
+        inset: 10px;
+        border-radius: 50%;
+        border: 2px solid transparent;
+        border-bottom-color: rgba(255, 255, 255, .55);
+        animation: app-loading-spin 1.6s linear infinite reverse;
+      }
+      .app-loading-mark {
+        width: 46px;
+        height: 46px;
+        border-radius: 12px;
+        box-shadow: 0 10px 24px rgba(31, 18, 64, .35);
+        animation: app-loading-pulse 1.6s ease-in-out infinite;
+      }
+      .app-loading-title {
+        color: #fff;
+        font-size: 20px;
+        font-weight: 650;
+        letter-spacing: .01em;
+      }
+      .app-loading-sub {
+        color: rgba(255, 255, 255, .72);
+        font-size: 13px;
+      }
+      .app-loading-close {
+        position: fixed;
+        top: 16px;
+        right: 18px;
+        z-index: 10000;
+        padding: 8px 12px;
+        border: 1px solid rgba(255, 255, 255, .38);
+        border-radius: 7px;
+        background: rgba(48, 31, 83, .28);
+        color: #fff;
+        font: 600 12px/1 "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        cursor: pointer;
+      }
+      .app-loading-close:hover { background: rgba(48, 31, 83, .48); }
+      .app-loading-close:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+      @keyframes app-loading-spin {
+        to { transform: rotate(360deg); }
+      }
+      @keyframes app-loading-pulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(.92); opacity: .85; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app-loading" class="app-loading">
+      <button id="app-loading-close" class="app-loading-close" type="button">Uygulamayı kapat</button>
+      <div class="app-loading-inner">
+        <div class="app-loading-spinner">
+          <img src="./icon-runtime.png" alt="" class="app-loading-mark">
+        </div>
+        <div class="app-loading-title">Hemşire Tedavi Yönetimi</div>
+        <div class="app-loading-sub">Yükleniyor...</div>
+      </div>
+    </div>
+    <div id="app"></div>
+    <script type="module" src="/src/preloaderSafety.js"></script>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

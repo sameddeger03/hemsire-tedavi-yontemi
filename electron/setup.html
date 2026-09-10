@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Bağlantısı</title>
+  <link rel="stylesheet" href="main.css">
+</head>
+<body class="gate gate-setup">
+  <main>
+    <img class="mark" src="icon.png" />
+    <h1>Kurulum</h1>
+    <p>Uygulamayı kullanmak için yönetici tarafından oluşturulan cihaz anahtarını girin.</p>
+    <form id="setup-form">
+      <label for="api-url">API adresi</label>
+      <input id="api-url" type="text" required autocomplete="url" inputmode="url" placeholder="tedavi.dislek.com"
+        pattern="[A-Za-z0-9.-]+(:[0-9]{1,5})?" title="Alan adını protokol veya yol olmadan girin">
+      <label for="api-key">API anahtarı</label>
+      <input id="api-key" type="password" required autocomplete="off" autofocus placeholder="etk_...">
+      <div id="error" role="alert"></div>
+      <button id="submit" type="submit">Doğrula ve Aç</button>
+    </form>
+  </main>
+  <script src="setupForm.js"></script>
+  <script src="setup.js"></script>
+</body>
+</html>
