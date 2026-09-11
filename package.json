@@ -1,6 +1,6 @@
 {
   "name": "client",
-  "version": "10.0.1",
+  "version": "5.0.1",
   "description": "Hemşireler için tedavi yönetimi uygulaması. Ücretsiz ve bağımsız.",
   "main": "electron/main.js",
   "build": {
