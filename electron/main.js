@@ -32,7 +32,6 @@ const { formatDose, normalizeMedicationDose, parseDose } = require('../shared/do
 const { createWindowsTaskScheduler, findOldestDueReminder, markReminderDelivered, normalizeReminders } = require('./reminderRuntime')
 const { normalizeClientMenuVisibility } = require('./clientMenuVisibility')
 const { classifySecondInstanceCommand, createRelaunchCoordinator } = require('./relaunchFlow')
-const { showStoreMigration } = require('./storeMigration')
 
 let mainWindow
 let authWindow
@@ -706,7 +705,6 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  if (await showStoreMigration({ app, dialog, shell })) return
   const splashResult = backgroundLaunch ? { action: 'offline' } : await runSplashGate()
   if (splashResult.action === 'quit') { app.quit(); return }
   if (splashResult.action === 'auth') {
