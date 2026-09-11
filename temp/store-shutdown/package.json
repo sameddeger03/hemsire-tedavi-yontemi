@@ -1,0 +1,35 @@
+{
+  "name": "hemsire-tedavi-store-shutdown",
+  "version": "2.0.0",
+  "description": "Microsoft Store sürümünün kullanım dışı olduğunu bildiren geçiş uygulaması.",
+  "main": "main.js",
+  "devDependencies": {
+    "electron": "43.2.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "com.sd.tedavi-yonetimi",
+    "productName": "Hemşire Tedavi Yönetimi",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "package.json"
+    ],
+    "win": {
+      "icon": "../../build/icon.ico",
+      "target": "appx"
+    },
+    "appx": {
+      "identityName": "SamedDeer.HemireTedaviYnetimi",
+      "publisher": "CN=ABC03F4F-0558-4C90-9D76-AD94D2846FD0",
+      "publisherDisplayName": "Samed Değer",
+      "applicationId": "HemsireTedaviYonetimi",
+      "displayName": "Hemşire Tedavi Yönetimi",
+      "languages": [
+        "tr-TR"
+      ]
+    }
+  }
+}
