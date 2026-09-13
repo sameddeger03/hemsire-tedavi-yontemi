@@ -314,6 +314,17 @@ function initMigrations(_db, _saveFn) {
       up: () => {
         try { db.run("ALTER TABLE drug_catalog ADD COLUMN mixture_content TEXT DEFAULT ''") } catch (e) {}
       }
+    },
+    {
+      version: 32,
+      up: () => {
+        const table = db.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'drug_catalog'")
+        if (!table.length) return
+        const columns = db.exec('PRAGMA table_info(drug_catalog)')[0]?.values || []
+        if (!columns.some(column => column[1] === 'mixture_content')) {
+          db.run("ALTER TABLE drug_catalog ADD COLUMN mixture_content TEXT DEFAULT ''")
+        }
+      }
     }
   ]
 

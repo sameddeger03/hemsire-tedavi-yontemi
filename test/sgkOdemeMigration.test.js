@@ -31,7 +31,7 @@ test('fresh catalog has sgk_odeme and label detail defaults', () => {
 
   db.run("INSERT INTO drug_catalog (label, active_ingredient) VALUES ('TEST', 'TEST')")
   expect(db.exec("SELECT sgk_odeme FROM drug_catalog WHERE label = 'TEST'")[0].values[0][0]).toBe(0)
-  expect(db.exec('PRAGMA user_version')[0].values[0][0]).toBe(31)
+  expect(db.exec('PRAGMA user_version')[0].values[0][0]).toBe(32)
   db.close()
 })
 
@@ -50,6 +50,19 @@ test('version 26 catalog migrates existing rows through label detail migration',
 
   expect(db.exec("SELECT sgk_odeme FROM drug_catalog WHERE label = 'MEVCUT'")[0].values[0][0]).toBe(0)
   expect(db.exec("SELECT label_detail FROM drug_catalog WHERE label = 'MEVCUT'")[0].values[0][0]).toBe('')
-  expect(db.exec('PRAGMA user_version')[0].values[0][0]).toBe(31)
+  expect(db.exec('PRAGMA user_version')[0].values[0][0]).toBe(32)
+  db.close()
+})
+
+test('version 31 catalog without mixture content is repaired', () => {
+  const db = new SQL.Database()
+  db.run('CREATE TABLE drug_catalog (id INTEGER PRIMARY KEY, label TEXT DEFAULT \'\')')
+  db.run('PRAGMA user_version = 31')
+
+  initMigrations(db)
+
+  const columns = db.exec('PRAGMA table_info(drug_catalog)')[0].values.map(column => column[1])
+  expect(columns).toContain('mixture_content')
+  expect(db.exec('PRAGMA user_version')[0].values[0][0]).toBe(32)
   db.close()
 })
