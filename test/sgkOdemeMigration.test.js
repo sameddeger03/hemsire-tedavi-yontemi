@@ -31,7 +31,7 @@ test('fresh catalog has sgk_odeme and label detail defaults', () => {
 
   db.run("INSERT INTO drug_catalog (label, active_ingredient) VALUES ('TEST', 'TEST')")
   expect(db.exec("SELECT sgk_odeme FROM drug_catalog WHERE label = 'TEST'")[0].values[0][0]).toBe(0)
-  expect(db.exec('PRAGMA user_version')[0].values[0][0]).toBe(30)
+  expect(db.exec('PRAGMA user_version')[0].values[0][0]).toBe(31)
   db.close()
 })
 
@@ -50,6 +50,6 @@ test('version 26 catalog migrates existing rows through label detail migration',
 
   expect(db.exec("SELECT sgk_odeme FROM drug_catalog WHERE label = 'MEVCUT'")[0].values[0][0]).toBe(0)
   expect(db.exec("SELECT label_detail FROM drug_catalog WHERE label = 'MEVCUT'")[0].values[0][0]).toBe('')
-  expect(db.exec('PRAGMA user_version')[0].values[0][0]).toBe(30)
+  expect(db.exec('PRAGMA user_version')[0].values[0][0]).toBe(31)
   db.close()
 })

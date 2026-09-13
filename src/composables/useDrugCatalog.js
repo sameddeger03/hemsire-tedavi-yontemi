@@ -15,7 +15,7 @@ export function useDrugCatalog(deps) {
       const ok = syncResult === true || syncResult?.ok === true
       const changed = syncResult === true || syncResult?.changed !== false
       if (ok) {
-        if (changed) deps.clearDrugPropsCache?.()
+        if (changed) deps.clearDrugPropsCache?.(syncResult?.cacheInvalidation)
         deps.serverOnline.value = true
         deps.catalogLastUpdatedAt.value = new Date().toISOString()
         await api().configSet('drugCatalogLastSyncedAt', deps.catalogLastUpdatedAt.value)
@@ -45,7 +45,7 @@ export function useDrugCatalog(deps) {
   return {
     drugCatalogList,
     syncDrugCatalog,
-    clearDrugPropsCache: () => deps.clearDrugPropsCache?.(),
+    clearDrugPropsCache: invalidation => deps.clearDrugPropsCache?.(invalidation),
     loadDrugCatalog,
     loadDrugFullNameMap
   }

@@ -168,11 +168,7 @@
           </template>
         </div>
         <div class="med-table-wrap" @contextmenu.prevent>
-          <div v-if="drugPropsLoading" class="drug-props-loading">
-            <RefreshCw :size="18" class="spin" />
-            <span>İlaçlar kontrol ediliyor...</span>
-          </div>
-          <table class="med-table" v-if="selectedPatient && !drugPropsLoading">
+          <table class="med-table" v-if="selectedPatient">
             <thead>
               <tr>
                 <th style="width:40%">İlaç</th><th style="width:7%">Yol</th><th style="width:8%">Doz</th><th style="width:5%" v-tooltip="'Lüzum Hali'">LH</th><th style="width:35%">Saatleri</th><th style="width:7%">Gün</th>
@@ -204,6 +200,8 @@
                       <span v-if="nonMatchingMeds.has(m.id)" class="icon-badge icon-warn" v-tooltip="'Günü değil'"><CalendarOff :size="13" /></span>
                       <span v-if="expiredMeds.has(m.id)" class="icon-badge icon-expired" v-tooltip="'Tarih aralığı sona erdi.'"><Clock :size="13" /></span>
                       <span v-if="dosageWarnings[m.id]" class="icon-badge icon-overdose" v-tooltip="dosageWarnings[m.id]"><AlertOctagon :size="13" /></span>
+                      <span v-if="drugProps[m.id]?._mixtureContent" class="icon-badge prop-mixture" v-tooltip="drugProps[m.id]._mixtureContent"><FlaskConical :size="13" /></span>
+                      <template v-if="!drugProps[m.id]?._karisimMi">
                       <span v-if="drugProps[m.id]?.coldChain" class="icon-badge prop-cold" v-tooltip="'Soğuk Zincir'"><Thermometer :size="13" /></span>
                       <span v-if="drugProps[m.id]?.hazardous" class="icon-badge prop-haz" v-tooltip="drugProps[m.id].hazardous.label"><Biohazard :size="13" /></span>
                       <span v-if="drugProps[m.id]?.highRisk" class="icon-badge prop-risk" v-tooltip="drugProps[m.id].highRisk.label"><AlertTriangle :size="13" /></span>
@@ -219,6 +217,7 @@
                       <span v-if="drugProps[m.id]?.anaphylaxisRisk" class="icon-badge prop-anaphylaxis" v-tooltip="warningTooltip(drugProps[m.id].anaphylaxisRisk)"><ShieldX :size="13" /></span>
                       <span v-if="drugProps[m.id]?.similarDrugNames?.length" class="icon-badge prop-similar-name" v-tooltip="`Benzer isimli ilaçlar: ${drugProps[m.id].similarDrugNames.join(', ')}`"><BookAlert :size="13" /></span>
                       <span v-if="drugProps[m.id]?.shortStability" class="icon-badge prop-stability" v-tooltip="warningTooltip(drugProps[m.id].shortStability)"><TimerReset :size="13" /></span>
+                      </template>
                       <span v-if="duplicateAIMeds.has(m.id)" class="icon-badge icon-dup" v-tooltip="'Bu etken maddeye sahip başka bir tedavi var.'"><Layers :size="13" /></span>
                     </div>
                   </div>
@@ -246,7 +245,7 @@
               </tr>
             </tbody>
           </table>
-          <div v-else-if="!drugPropsLoading" class="empty-state">
+          <div v-else class="empty-state">
             <UserRoundArrowLeft :size="48" :stroke-width="1" class="empty-file-icon" />
             <p>Soldaki listeden bir hasta seçin</p>
           </div>
@@ -1322,7 +1321,7 @@
 </template>
 
     <script>
-import { RefreshCw, Minus, Maximize2, Minimize2, X, Plus, Printer, Archive, ClipboardPaste, UserRoundArrowLeft, FilePen, Bell as BellIcon, PackageSearch, ChevronRight, ArrowLeft, Pencil, Trash2, Timer, Settings as SettingsIcon, AlertCircle, AlertTriangle, CalendarOff, CalendarDays, Clock, AlertOctagon, Thermometer, Biohazard, Sun, ShieldAlert, FileText, Layers, HeartPlus, MoveUp, Syringe, GitBranch, Gauge, Filter, Pill, TrendingDown, ShieldX, BookAlert, TimerReset, Handshake, BookOpenText, IdCard } from '@lucide/vue'
+import { RefreshCw, Minus, Maximize2, Minimize2, X, Plus, Printer, Archive, ClipboardPaste, UserRoundArrowLeft, FilePen, Bell as BellIcon, PackageSearch, ChevronRight, ArrowLeft, Pencil, Trash2, Timer, Settings as SettingsIcon, AlertCircle, AlertTriangle, CalendarOff, CalendarDays, Clock, AlertOctagon, Thermometer, Biohazard, Sun, ShieldAlert, FileText, Layers, HeartPlus, MoveUp, Syringe, GitBranch, Gauge, Filter, Pill, TrendingDown, ShieldX, BookAlert, TimerReset, Handshake, BookOpenText, IdCard, FlaskConical } from '@lucide/vue'
 import SettingsModal from './components/modals/SettingsModal.vue'
 import PrintProgressModal from './components/modals/PrintProgressModal.vue'
 import ReportModal from './components/modals/ReportModal.vue'
@@ -1358,20 +1357,23 @@ import { useDrugCatalog } from './composables/useDrugCatalog.js'
 import { useMayiInf } from './composables/useMayiInf.js'
 import { buildLabelHome, buildMultilineZplFields, normalizeLabelOffset } from './domain/zplLayout.js'
 import '../shared/doseUnits.js'
+import '../shared/drugPropsCache.js'
 
 const { DOSE_UNITS, convertDoseValue, doseToMilligrams, formatDose, normalizeMedicationDose, parseDose, parseDoseAmount } = globalThis.__TEDAVI_DOSE_UNITS__
+const { drugPropsCacheKey, filterDrugPropsCache } = globalThis.__TEDAVI_DRUG_PROPS_CACHE__
 const drugPropsCache = new Map()
 let drugPropsLoadToken = 0
-
-function drugPropsCacheKey(med) {
-  return [med?.name, med?.catalogBarcode, med?.route, med?.activeIngredient]
-    .map(value => String(value || '').trim().toLocaleLowerCase('tr-TR'))
-    .join('|')
-}
 
 function persistDrugPropsCache() {
   if (!window.electronAPI?.configSet) return
   window.electronAPI.configSet('drugPropsCache', Object.fromEntries(drugPropsCache)).catch(() => {})
+}
+
+function clearDrugPropsCache(invalidation) {
+  const filtered = filterDrugPropsCache(Object.fromEntries(drugPropsCache), invalidation)
+  drugPropsCache.clear()
+  Object.entries(filtered).forEach(([key, value]) => drugPropsCache.set(key, value))
+  persistDrugPropsCache()
 }
 
 function apiAddressForDisplay(value) {
@@ -1380,7 +1382,7 @@ function apiAddressForDisplay(value) {
 
 export default {
   mixins: [stockManagement],
-  components: { PrintProgressModal, RefreshCw, Minus, Maximize2, Minimize2, X, Plus, Printer, Archive, ClipboardPaste, UserRoundArrowLeft, FilePen, Bell: BellIcon, PackageSearch, ChevronRight, ArrowLeft, Pencil, Trash2, Timer, Settings: SettingsIcon, AlertCircle, AlertTriangle, CalendarOff, CalendarDays, Clock, AlertOctagon, Thermometer, Biohazard, Sun, ShieldAlert, FileText, Layers, HeartPlus, MoveUp, Syringe, GitBranch, Gauge, Filter, Pill, TrendingDown, ShieldX, BookAlert, TimerReset, Handshake, BookOpenText, IdCard, SettingsModal, ReportModal, ArchiveModal, ConfirmModal, UpdateDecisionModal, PatientModal, PatientClipboardSelectModal, ActiveReminderAlert, ReminderModal, ExpiredDrugAlert, OzelEtiketModal, DosageManagerModal, DrugCatalogModal },
+  components: { PrintProgressModal, RefreshCw, Minus, Maximize2, Minimize2, X, Plus, Printer, Archive, ClipboardPaste, UserRoundArrowLeft, FilePen, Bell: BellIcon, PackageSearch, ChevronRight, ArrowLeft, Pencil, Trash2, Timer, Settings: SettingsIcon, AlertCircle, AlertTriangle, CalendarOff, CalendarDays, Clock, AlertOctagon, Thermometer, Biohazard, Sun, ShieldAlert, FileText, Layers, HeartPlus, MoveUp, Syringe, GitBranch, Gauge, Filter, Pill, TrendingDown, ShieldX, BookAlert, TimerReset, Handshake, BookOpenText, IdCard, FlaskConical, SettingsModal, ReportModal, ArchiveModal, ConfirmModal, UpdateDecisionModal, PatientModal, PatientClipboardSelectModal, ActiveReminderAlert, ReminderModal, ExpiredDrugAlert, OzelEtiketModal, DosageManagerModal, DrugCatalogModal },
   watch: {
     meds: {
       handler() { if (this.selectedPatientId) this.loadDrugProps(this.selectedPatientId) },
@@ -1431,9 +1433,9 @@ export default {
           ])
           const result = { props, similarDrugNames }
           drugPropsCache.set(key, result)
-          persistDrugPropsCache()
           return { med, result }
         }))
+        persistDrugPropsCache()
         if (loadToken !== drugPropsLoadToken) return
         results.forEach(({ med, result }) => {
           if (result.props || result.similarDrugNames.length) state.drugProps.value[med.id] = { ...(result.props || {}), similarDrugNames: result.similarDrugNames }
@@ -1449,7 +1451,7 @@ export default {
       catalogLastUpdatedAt: state.catalogLastUpdatedAt,
       selectedPatientId: state.selectedPatientId,
       loadDrugProps,
-      clearDrugPropsCache: () => { drugPropsCache.clear(); persistDrugPropsCache() },
+      clearDrugPropsCache,
       drugFullNameMap: state.drugFullNameMap
     })
 
@@ -1856,6 +1858,10 @@ export default {
       // Catalog is synchronized by the final startup gate. Runtime checks only
       // ask the lightweight /check endpoint and open that gate when needed.
       this._catalogCheckTimer = setInterval(() => this.checkCatalogUpdate(), 30 * 60 * 1000)
+      this._catalogFocusListener = () => { if (!document.hidden) this.checkCatalogUpdate() }
+      this._catalogVisibilityListener = () => { if (!document.hidden) this.checkCatalogUpdate() }
+      window.addEventListener('focus', this._catalogFocusListener)
+      document.addEventListener('visibilitychange', this._catalogVisibilityListener)
       // Load active ingredients for F7 dropdowns
       await this.loadDrugCatalog()
       // Load full name map for tooltips
@@ -1868,6 +1874,8 @@ export default {
     document.removeEventListener('keydown', this.onKeyDown)
     clearInterval(this._statusbarClockTimer)
     if (this._catalogCheckTimer) clearInterval(this._catalogCheckTimer)
+    if (this._catalogFocusListener) window.removeEventListener('focus', this._catalogFocusListener)
+    if (this._catalogVisibilityListener) document.removeEventListener('visibilitychange', this._catalogVisibilityListener)
     this.disposeReport()
     if (this._runtimeUpdateListener) this._runtimeUpdateListener()
     if (this._serverConnectionListener) this._serverConnectionListener()
@@ -1892,21 +1900,33 @@ export default {
       // A visible modal means the nurse is in the middle of an operation.
       // Keep the saved server timestamp unchanged so the next interval retries.
       if (document.querySelector('.modal, .modal-overlay')) return
+      const now = Date.now()
+      if (this._catalogCheckInFlight || (this._lastCatalogCheckAt && now - this._lastCatalogCheckAt < 60 * 1000)) return
+      this._lastCatalogCheckAt = now
+      this._catalogCheckInFlight = true
       try {
         const check = await window.electronAPI.dbCheckDrugCatalog(this.apiUrl)
-        if (!check?.ok || !check.updatedAt) return
-        const local = await window.electronAPI.configGet('drugCatalogServerUpdatedAt')
-        if (local === check.updatedAt) return
+        if (!check?.ok || (!check.updatedAt && check.revision === '')) return
+        const serverRevision = String(check.revision ?? '')
+        if (serverRevision) {
+          const localRevision = await window.electronAPI.configGet('drugCatalogServerRevision')
+          if (String(localRevision ?? '') === serverRevision) return
+        } else {
+          const localUpdatedAt = await window.electronAPI.configGet('drugCatalogServerUpdatedAt')
+          if (localUpdatedAt === check.updatedAt) return
+        }
         const result = await window.electronAPI.runDataUpdateGate?.()
         if (!result?.ok) return
         this.catalogLastUpdatedAt = new Date().toISOString()
         await this.loadClientMenuVisibility()
-        this.clearDrugPropsCache?.()
+        this.clearDrugPropsCache?.(result.cacheInvalidation)
         await this.loadDrugCatalog()
         await this.loadDrugFullNameMap()
         if (this.selectedPatientId) await this.loadDrugProps(this.selectedPatientId)
       } catch (error) {
         console.warn('Katalog güncelleme kontrolü başarısız:', error?.message || error)
+      } finally {
+        this._catalogCheckInFlight = false
       }
     },
     async loadClientMenuVisibility(refresh = false) {
@@ -2032,9 +2052,9 @@ export default {
           ])
           const result = { props, similarDrugNames }
           drugPropsCache.set(key, result)
-          persistDrugPropsCache()
           return { med, result }
         }))
+        persistDrugPropsCache()
         if (loadToken !== drugPropsLoadToken) return
         results.forEach(({ med, result }) => {
           if (result.props || result.similarDrugNames.length) this.drugProps[med.id] = { ...(result.props || {}), similarDrugNames: result.similarDrugNames }

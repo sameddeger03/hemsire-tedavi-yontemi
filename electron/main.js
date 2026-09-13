@@ -29,6 +29,7 @@ const selcukEcza = require('./selcukEcza')
 const ilacRehberi = require('./ilacRehberi')
 const ilacFiyati = require('./ilacFiyati')
 const { formatDose, normalizeMedicationDose, parseDose } = require('../shared/doseUnits')
+const { filterDrugPropsCache } = require('../shared/drugPropsCache')
 const { createWindowsTaskScheduler, findOldestDueReminder, markReminderDelivered, normalizeReminders } = require('./reminderRuntime')
 const { normalizeClientMenuVisibility } = require('./clientMenuVisibility')
 const { classifySecondInstanceCommand, createRelaunchCoordinator } = require('./relaunchFlow')
@@ -503,7 +504,9 @@ function runDataUpdateGate() {
       if (result?.ok) {
         const now = new Date().toISOString()
         configUpdates.drugCatalogServerUpdatedAt = result.updatedAt || now
+        if (result.revision !== undefined && result.revision !== '') configUpdates.drugCatalogServerRevision = String(result.revision)
         configUpdates.drugCatalogLastSyncedAt = now
+        if (result.changed) configUpdates.drugPropsCache = filterDrugPropsCache(config.get('drugPropsCache'), result.cacheInvalidation)
       }
       if (menuVisibility) {
         configUpdates.clientMenuVisibilityCache = menuVisibility
@@ -869,7 +872,8 @@ ipcMain.handle('db-get-patient-inf-list', async (event, id) => db.getPatientInfL
 ipcMain.handle('db-update-patient-inf-list', async (event, id, list) => db.updatePatientInfList(id, list))
 ipcMain.handle('db-sync-drug-catalog', async (event, apiUrl) => {
   const base = String(config.get('apiUrl') || API_URL).replace(/\/$/, '')
-  const url = apiUrl || `${base}/api/drugs`
+  const requestedUrl = String(apiUrl || base).replace(/\/$/, '')
+  const url = requestedUrl.includes('/api/drugs') ? requestedUrl : `${requestedUrl}/api/drugs`
   if (apiUrl && typeof apiUrl === 'string') {
     if (!apiUrl.startsWith(base)) {
       devLog.warn('REST API', 'Yapılandırılmış REST API adresiyle eşleşmeyen katalog isteği engellendi')
@@ -880,7 +884,8 @@ ipcMain.handle('db-sync-drug-catalog', async (event, apiUrl) => {
 })
 ipcMain.handle('db-check-drug-catalog', async (event, apiUrl) => {
   const base = String(config.get('apiUrl') || API_URL).replace(/\/$/, '')
-  const url = apiUrl || `${base}/api/drugs`
+  const requestedUrl = String(apiUrl || base).replace(/\/$/, '')
+  const url = requestedUrl.includes('/api/drugs') ? requestedUrl : `${requestedUrl}/api/drugs`
   if (apiUrl && typeof apiUrl === 'string' && !apiUrl.startsWith(base)) return { ok: false, error: 'API adresi eşleşmiyor' }
   return db.checkDrugCatalog(url)
 })

@@ -53,23 +53,26 @@
                     Hata Bildir
                   </button>
                 </div>
-                <div class="catalog-sgk-statuses">
-                  <span class="catalog-sgk-status" :class="sgkBadge.kind">
-                    {{ sgkBadge.text }}
-                  </span>
-                  <span v-if="ilacDurumuBadge" class="catalog-sgk-status" :class="ilacDurumuBadge.kind">
-                    {{ ilacDurumuBadge.text }}
-                  </span>
-                  <span v-if="firmaBadge" class="catalog-sgk-status" :class="firmaBadge.kind">{{ firmaBadge.text }}</span>
-                  <span v-if="receteBadge" class="catalog-sgk-status" :class="receteBadge.kind">{{ receteBadge.text }}</span>
-                </div>
-                <div v-if="selected.full_name || selected.barcode" class="catalog-products">
-                  <div class="catalog-product-row">
-                    {{ selected.full_name }} <span v-if="selected.barcode" class="catalog-product-barcode">({{ selected.barcode }})</span>
-                  </div>
+              </div>
+              <div v-if="!selected.karisimMi" class="catalog-sgk-statuses">
+                <span class="catalog-sgk-status" :class="sgkBadge.kind">
+                  {{ sgkBadge.text }}
+                </span>
+                <span v-if="ilacDurumuBadge" class="catalog-sgk-status" :class="ilacDurumuBadge.kind">
+                  {{ ilacDurumuBadge.text }}
+                </span>
+                <span v-if="firmaBadge" class="catalog-sgk-status" :class="firmaBadge.kind">{{ firmaBadge.text }}</span>
+                <span v-if="receteBadge" class="catalog-sgk-status" :class="receteBadge.kind">{{ receteBadge.text }}</span>
+              </div>
+              <div v-if="selected.full_name || selected.barcode" class="catalog-products">
+                <div class="catalog-product-row">
+                  {{ selected.full_name }} <span v-if="selected.barcode && !selected.karisimMi" class="catalog-product-barcode">({{ selected.barcode }})</span>
                 </div>
               </div>
-              <div class="catalog-prospectus">
+              <div v-if="selected.mixture_content" class="catalog-mixture-content" :title="selected.mixture_content">
+                <FlaskConical :size="15" /> <span>Karışım içeriği: {{ selected.mixture_content }}</span>
+              </div>
+              <div v-if="!selected.karisimMi" class="catalog-prospectus">
                 <div class="catalog-prospectus-row">
                   <button class="btn btn-primary" :disabled="prospectusLoading || uptodateLoading || globalRphLoading || priceLoading" @click="openProspectus('KÜB')">
                     <ExternalLink :size="14" />
@@ -106,7 +109,7 @@
               </div>
             </dl>
 
-            <section class="catalog-warning-section">
+            <section v-if="!selected.karisimMi" class="catalog-warning-section">
               <h5>Güvenlik ve uygulama bilgileri</h5>
               <div v-if="detailLoading" class="catalog-state inline">Bilgiler yükleniyor...</div>
               <template v-else>
@@ -143,7 +146,7 @@
               </template>
             </section>
 
-            <section v-if="clinicalGroups.administration.length" class="catalog-clinical-section">
+            <section v-if="!selected.karisimMi && clinicalGroups.administration.length" class="catalog-clinical-section">
               <h5>Hazırlama ve uygulama rehberi</h5>
               <article v-for="item in clinicalGroups.administration" :key="clinicalKey(item)" class="catalog-clinical-card">
                 <div class="catalog-clinical-title"><Syringe :size="16" /><strong>{{ item.title }}</strong></div>
@@ -155,7 +158,7 @@
               </article>
             </section>
 
-            <section v-if="clinicalGroups.incompatibility.length" class="catalog-clinical-section danger">
+            <section v-if="!selected.karisimMi && clinicalGroups.incompatibility.length" class="catalog-clinical-section danger">
               <h5>İlaç geçimsizlikleri</h5>
               <article v-for="item in clinicalGroups.incompatibility" :key="clinicalKey(item)" class="catalog-clinical-card">
                 <div class="catalog-clinical-title"><Unplug :size="16" /><strong>{{ item.title }}</strong></div>
@@ -168,7 +171,7 @@
               </article>
             </section>
 
-            <section v-if="clinicalGroups.interactions.length" class="catalog-clinical-section warning">
+            <section v-if="!selected.karisimMi && clinicalGroups.interactions.length" class="catalog-clinical-section warning">
               <h5>İlaç ve besin etkileşimleri</h5>
               <article v-for="item in clinicalGroups.interactions" :key="clinicalKey(item)" class="catalog-clinical-card">
                 <div class="catalog-clinical-title"><Utensils :size="16" /><strong>{{ item.title }}</strong></div>
@@ -309,7 +312,7 @@
 </template>
 
 <script>
-import { AlertTriangle, BadgeTurkishLira, BookAlert, BookOpenText, ExternalLink, LoaderCircle, MessageSquareWarning, Search, SearchX, Syringe, Unplug, Utensils } from '@lucide/vue'
+import { AlertTriangle, BadgeTurkishLira, BookAlert, BookOpenText, ExternalLink, FlaskConical, LoaderCircle, MessageSquareWarning, Search, SearchX, Syringe, Unplug, Utensils } from '@lucide/vue'
 
 const PROPERTY_LABELS = {
   coldChain: 'Soğuk zincir', hazardous: 'Tehlikeli ilaç', highRisk: 'Yüksek riskli ilaç',
@@ -321,7 +324,7 @@ const PROPERTY_LABELS = {
 }
 
 export default {
-  components: { AlertTriangle, BadgeTurkishLira, BookAlert, BookOpenText, ExternalLink, LoaderCircle, MessageSquareWarning, Search, SearchX, Syringe, Unplug, Utensils },
+  components: { AlertTriangle, BadgeTurkishLira, BookAlert, BookOpenText, ExternalLink, FlaskConical, LoaderCircle, MessageSquareWarning, Search, SearchX, Syringe, Unplug, Utensils },
   props: { open: Boolean, initialQuery: { type: String, default: '' } },
   emits: ['close', 'reportDrug', 'catalog-context-menu'],
   data: () => ({

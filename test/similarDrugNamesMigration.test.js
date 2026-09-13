@@ -18,6 +18,6 @@ describe('similar drug names migration', () => {
     expect(clinicalTable[0].values[0][0]).toBe('drug_clinical_info')
     const medColumns = db.exec('PRAGMA table_info(meds)')[0].values.map(row => row[1])
     expect(medColumns).toEqual(expect.arrayContaining(['doseValue', 'doseUnit']))
-    expect(db.exec('PRAGMA user_version')[0].values[0][0]).toBe(30)
+    expect(db.exec('PRAGMA user_version')[0].values[0][0]).toBe(31)
   })
 })

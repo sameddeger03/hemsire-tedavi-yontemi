@@ -308,6 +308,12 @@ function initMigrations(_db, _saveFn) {
         try { db.run('ALTER TABLE meds ADD COLUMN catalogLabelDetailEnabled INTEGER DEFAULT 0') } catch (e) {}
         try { db.run("UPDATE meds SET catalogLabelDetailEnabled = 1 WHERE TRIM(COALESCE(catalogLabelDetail, '')) != ''") } catch (e) {}
       }
+    },
+    {
+      version: 31,
+      up: () => {
+        try { db.run("ALTER TABLE drug_catalog ADD COLUMN mixture_content TEXT DEFAULT ''") } catch (e) {}
+      }
     }
   ]
 

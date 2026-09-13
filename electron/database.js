@@ -317,11 +317,116 @@ async function checkDrugCatalog(apiUrl) {
     return {
       ok: true,
       updatedAt: typeof body.updatedAt === 'string' ? body.updatedAt : '',
-      revision: typeof body.revision === 'string' ? body.revision : ''
+      revision: typeof body.revision === 'string' || Number.isSafeInteger(body.revision) ? String(body.revision) : ''
     }
   } catch (error) {
     logSyncRequestError('KATALOG KONTROLÜ', error)
     return { ok: false, error: error.message }
+  }
+}
+
+function getCatalogMeta(key) {
+  db.run('CREATE TABLE IF NOT EXISTS catalog_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT \'\')')
+  const stmt = db.prepare('SELECT value FROM catalog_meta WHERE key = ? LIMIT 1', [key])
+  const value = stmt.step() ? stmt.getAsObject().value : ''
+  stmt.free()
+  return value || ''
+}
+
+function refreshMedicationLabelDetails() {
+  db.run(`UPDATE meds
+    SET catalogLabelDetail = COALESCE((
+      SELECT label_detail FROM drug_catalog
+      WHERE drug_catalog.barcode = meds.catalogBarcode
+      LIMIT 1
+    ), ''),
+    catalogLabelDetailEnabled = CASE WHEN EXISTS (
+      SELECT 1 FROM drug_catalog
+      WHERE drug_catalog.barcode = meds.catalogBarcode
+        AND TRIM(COALESCE(drug_catalog.label_detail, '')) != ''
+    ) THEN 1 ELSE 0 END
+    WHERE catalogBarcode IS NOT NULL AND TRIM(catalogBarcode) != ''
+      AND COALESCE(catalogLabelDetailCustomized, 0) = 0`)
+}
+
+async function syncDrugCatalogChanges(sourceUrl, apiKey, fromRevision, serverCheck) {
+  let cursor = Number(fromRevision)
+  let targetRevision = Number(serverCheck.revision)
+  const changes = new Map()
+
+  while (cursor < targetRevision) {
+    const target = new URL(buildCatalogEndpoint(sourceUrl, 'changes'))
+    target.searchParams.set('after', String(cursor))
+    const response = await requestJson(target.toString(), apiKey)
+    const body = response.body || {}
+    if (!Array.isArray(body.drugs) || !Array.isArray(body.deletedIds) || !/^\d+$/.test(String(body.revision ?? '')) || !/^\d+$/.test(String(body.latestRevision ?? ''))) {
+      throw new Error('Sunucu katalog değişiklikleri için beklenmeyen bir yanıt döndürdü')
+    }
+    for (const drug of body.drugs) changes.set(Number(drug.id), drug)
+    for (const id of body.deletedIds) changes.set(Number(id), null)
+    const nextRevision = Number(body.revision)
+    if (nextRevision <= cursor) throw new Error('Sunucu katalog revizyonu ilerlemedi')
+    cursor = nextRevision
+    targetRevision = Math.max(targetRevision, Number(body.latestRevision))
+    if (!body.hasMore) break
+  }
+
+  if (cursor !== targetRevision) throw new Error(`Eksik katalog değişikliği alındı: ${cursor}/${targetRevision}`)
+
+  const invalidation = { names: new Set(), barcodes: new Set(), activeIngredients: new Set() }
+  const collectIdentity = drug => {
+    if (!drug) return
+    if (drug.label) invalidation.names.add(drug.label)
+    if (drug.full_name) invalidation.names.add(drug.full_name)
+    if (drug.barcode) invalidation.barcodes.add(String(drug.barcode))
+    if (drug.active_ingredient) invalidation.activeIngredients.add(drug.active_ingredient)
+  }
+  const oldDrug = db.prepare('SELECT label, full_name, barcode, active_ingredient FROM drug_catalog WHERE id = ?')
+  for (const [id, drug] of changes) {
+    oldDrug.bind([id])
+    if (oldDrug.step()) collectIdentity(oldDrug.getAsObject())
+    oldDrug.reset()
+    collectIdentity(drug)
+  }
+  oldDrug.free()
+
+  db.run('BEGIN TRANSACTION')
+  try {
+    const upsert = db.prepare(`INSERT OR REPLACE INTO drug_catalog
+      (id, label, label_detail, full_name, barcode, atc_code, active_ingredient, etken_detay, karisimMi, mixture_content, sgk_odeme, form, drug_type, properties)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    const remove = db.prepare('DELETE FROM drug_catalog WHERE id = ?')
+    for (const [id, drug] of changes) {
+      if (!Number.isSafeInteger(id) || id < 0 || !drug?.active_ingredient) {
+        if (Number.isSafeInteger(id) && id >= 0) remove.run([id])
+        continue
+      }
+      upsert.run([id, drug.label || '', drug.label_detail || '', drug.full_name || '', String(drug.barcode || ''),
+        drug.atc_code || '', drug.active_ingredient, drug.etken_detay || '', drug.karisimMi ? 1 : 0,
+        drug.mixture_content || '', drug.sgk_odeme ? 1 : 0, drug.form || '', drug.drug_type || '',
+        drug.properties ? JSON.stringify(drug.properties) : null])
+    }
+    upsert.free()
+    remove.free()
+    refreshMedicationLabelDetails()
+    db.run("INSERT OR REPLACE INTO catalog_meta (key, value) VALUES ('server_revision', ?)", [String(cursor)])
+    db.run('COMMIT')
+  } catch (error) {
+    try { db.run('ROLLBACK') } catch (_) {}
+    throw error
+  }
+  saveDatabase()
+  devLog.success('İLAÇLAR', `${changes.size} değişen ilaç kaydı güncellendi`)
+  return {
+    ok: true,
+    changed: changes.size > 0,
+    updatedAt: serverCheck.updatedAt,
+    revision: String(cursor),
+    cacheInvalidation: {
+      names: [...invalidation.names],
+      barcodes: [...invalidation.barcodes],
+      activeIngredients: [...invalidation.activeIngredients]
+    }
   }
 }
 
@@ -336,6 +441,18 @@ async function syncDrugCatalog(apiUrl) {
   try {
     const target = new URL(sourceUrl)
     const serverCheck = await checkDrugCatalog(sourceUrl)
+    if (!serverCheck.ok) throw new Error(serverCheck.error || 'Katalog kontrolü başarısız')
+    const localServerRevision = getCatalogMeta('server_revision')
+    if (/^\d+$/.test(localServerRevision) && /^\d+$/.test(serverCheck.revision) && Number(localServerRevision) <= Number(serverCheck.revision)) {
+      if (localServerRevision === serverCheck.revision) {
+        return { ok: true, changed: false, updatedAt: serverCheck.updatedAt, revision: serverCheck.revision }
+      }
+      try {
+        return await syncDrugCatalogChanges(sourceUrl, apiKey, localServerRevision, serverCheck)
+      } catch (error) {
+        devLog.warn('İLAÇLAR', `Değişiklik listesi alınamadı; tam katalog senkronuna geçiliyor: ${error.message}`)
+      }
+    }
     target.searchParams.delete('limit')
     target.searchParams.delete('page')
     devLog.info('REST API', `İlaç kataloğuna bağlanılıyor: ${target.origin}${target.pathname}`)
@@ -390,13 +507,11 @@ async function syncDrugCatalog(apiUrl) {
     if (!Array.isArray(clinicalInfo)) throw new Error('Sunucu klinik katalog bilgileri yerine beklenmeyen bir yanıt döndürdü')
 
     const revision = crypto.createHash('sha256').update(JSON.stringify({
-      drugs: drugs.map(d => [d.label || '', d.label_detail || '', d.full_name || '', String(d.barcode || ''), d.atc_code || '', d.active_ingredient || '', d.etken_detay || '', Boolean(d.karisimMi), Boolean(d.sgk_odeme), d.form || '', d.drug_type || '', d.properties || null]),
+      drugs: drugs.map(d => [d.id, d.label || '', d.label_detail || '', d.full_name || '', String(d.barcode || ''), d.atc_code || '', d.active_ingredient || '', d.etken_detay || '', Boolean(d.karisimMi), d.mixture_content || '', Boolean(d.sgk_odeme), d.form || '', d.drug_type || '', d.properties || null]),
       similarDrugNames,
       clinicalInfo
     })).digest('hex')
-    db.run('CREATE TABLE IF NOT EXISTS catalog_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT \'\')')
-    const revisionRows = db.exec("SELECT value FROM catalog_meta WHERE key = 'revision' LIMIT 1")
-    const previousRevision = revisionRows[0]?.values?.[0]?.[0] || ''
+    const previousRevision = getCatalogMeta('revision')
     const changed = previousRevision !== revision
 
     db.run('BEGIN TRANSACTION')
@@ -410,16 +525,17 @@ async function syncDrugCatalog(apiUrl) {
             active_ingredient TEXT DEFAULT '',
             etken_detay TEXT DEFAULT '',
             karisimMi INTEGER DEFAULT 0,
+            mixture_content TEXT DEFAULT '',
             sgk_odeme INTEGER NOT NULL DEFAULT 0,
             form TEXT DEFAULT '',
             drug_type TEXT DEFAULT '',
             properties TEXT DEFAULT NULL
           )`)
-    const stmt = db.prepare('INSERT INTO drug_catalog_new (label, label_detail, full_name, barcode, atc_code, active_ingredient, etken_detay, karisimMi, sgk_odeme, form, drug_type, properties) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    const stmt = db.prepare('INSERT INTO drug_catalog_new (id, label, label_detail, full_name, barcode, atc_code, active_ingredient, etken_detay, karisimMi, mixture_content, sgk_odeme, form, drug_type, properties) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
     let importedCount = 0
     for (const d of drugs) {
       if (!d.active_ingredient) continue
-      stmt.run([d.label || '', d.label_detail || '', d.full_name || '', String(d.barcode || ''), d.atc_code || '', d.active_ingredient || '', d.etken_detay || '', d.karisimMi ? 1 : 0, d.sgk_odeme ? 1 : 0, d.form || '', d.drug_type || '', d.properties ? JSON.stringify(d.properties) : null])
+      stmt.run([d.id, d.label || '', d.label_detail || '', d.full_name || '', String(d.barcode || ''), d.atc_code || '', d.active_ingredient || '', d.etken_detay || '', d.karisimMi ? 1 : 0, d.mixture_content || '', d.sgk_odeme ? 1 : 0, d.form || '', d.drug_type || '', d.properties ? JSON.stringify(d.properties) : null])
       importedCount++
     }
     stmt.free()
@@ -429,19 +545,7 @@ async function syncDrugCatalog(apiUrl) {
     db.run('CREATE INDEX IF NOT EXISTS idx_dc_ai ON drug_catalog(active_ingredient)')
     db.run('CREATE INDEX IF NOT EXISTS idx_dc_etken_detay ON drug_catalog(etken_detay)')
     db.run('CREATE INDEX IF NOT EXISTS idx_dc_barcode ON drug_catalog(barcode)')
-    db.run(`UPDATE meds
-      SET catalogLabelDetail = COALESCE((
-        SELECT label_detail FROM drug_catalog
-        WHERE drug_catalog.barcode = meds.catalogBarcode
-        LIMIT 1
-      ), ''),
-      catalogLabelDetailEnabled = CASE WHEN EXISTS (
-        SELECT 1 FROM drug_catalog
-        WHERE drug_catalog.barcode = meds.catalogBarcode
-          AND TRIM(COALESCE(drug_catalog.label_detail, '')) != ''
-      ) THEN 1 ELSE 0 END
-      WHERE catalogBarcode IS NOT NULL AND TRIM(catalogBarcode) != ''
-        AND COALESCE(catalogLabelDetailCustomized, 0) = 0`)
+    refreshMedicationLabelDetails()
     db.run(`CREATE TABLE similar_drug_names_new (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       drug_label TEXT NOT NULL,
@@ -493,10 +597,13 @@ async function syncDrugCatalog(apiUrl) {
     db.run('CREATE INDEX IF NOT EXISTS idx_dci_lookup ON drug_clinical_info(lookup_name)')
     db.run('CREATE INDEX IF NOT EXISTS idx_dci_category ON drug_clinical_info(category)')
     db.run("INSERT OR REPLACE INTO catalog_meta (key, value) VALUES ('revision', ?)", [revision])
+    if (/^\d+$/.test(serverCheck.revision)) {
+      db.run("INSERT OR REPLACE INTO catalog_meta (key, value) VALUES ('server_revision', ?)", [serverCheck.revision])
+    }
     db.run('COMMIT')
     saveDatabase()
     devLog.success('İLAÇLAR', `${importedCount} ilaç güncellendi (${Date.now() - startedAt} ms)`)
-    return { ok: true, changed, updatedAt: serverCheck.updatedAt, revision }
+    return { ok: true, changed, updatedAt: serverCheck.updatedAt, revision: serverCheck.revision }
   } catch (error) {
     try { db.run('ROLLBACK') } catch (_) {}
     console.error('syncDrugCatalog error:', error.message)
@@ -597,7 +704,7 @@ function getDrugSimilarities(label) {
 function searchDrugCatalog(query, formFilter) {
   const q = String(query || '').trim().toLowerCase()
   let sql = `
-    SELECT DISTINCT full_name, barcode, label, label_detail, active_ingredient, etken_detay, karisimMi, sgk_odeme, form, drug_type
+    SELECT DISTINCT full_name, barcode, label, label_detail, active_ingredient, etken_detay, karisimMi, mixture_content, sgk_odeme, form, drug_type
     FROM drug_catalog
     WHERE (LOWER(full_name) LIKE ? OR LOWER(label) LIKE ? OR LOWER(label_detail) LIKE ? OR LOWER(active_ingredient) LIKE ? OR LOWER(etken_detay) LIKE ?)
   `
@@ -1077,22 +1184,32 @@ function mergePropertyRows(stmt) {
 function getDrugPropertiesForMedication(medication) {
   const barcode = String(medication?.catalogBarcode || '').trim()
   if (barcode) {
-    const exactMatch = db.prepare('SELECT 1 FROM drug_catalog WHERE barcode = ? LIMIT 1', [barcode])
-    const catalogDrugExists = exactMatch.step()
+    const exactMatch = db.prepare('SELECT label, full_name, active_ingredient FROM drug_catalog WHERE barcode = ? LIMIT 1', [barcode])
+    const catalogDrug = exactMatch.step() ? exactMatch.getAsObject() : null
     exactMatch.free()
-
-    const stmt = db.prepare('SELECT properties FROM drug_catalog WHERE barcode = ? AND properties IS NOT NULL', [barcode])
-    const result = mergePropertyRows(stmt)
-    stmt.free()
-    if (catalogDrugExists) return result
+    const normalize = value => String(value || '').trim().toLocaleLowerCase('tr-TR')
+    const name = normalize(medication?.name)
+    const ingredient = normalize(medication?.activeIngredient)
+    const identityMatches = catalogDrug && (
+      (!name && !ingredient) ||
+      name === normalize(catalogDrug.label) ||
+      name === normalize(catalogDrug.full_name) ||
+      ingredient === normalize(catalogDrug.active_ingredient)
+    )
+    if (identityMatches) {
+      const stmt = db.prepare('SELECT properties FROM drug_catalog WHERE barcode = ? AND properties IS NOT NULL', [barcode])
+      const result = mergePropertyRows(stmt)
+      stmt.free()
+      return addDrugCatalogMetadata(result, db.prepare('SELECT karisimMi, mixture_content FROM drug_catalog WHERE barcode = ? LIMIT 1', [barcode]))
+    }
   }
 
   const name = String(medication?.name || '').trim()
   const form = String(medication?.route || '').trim()
   if (name) {
-    const matchParams = [name, form, form]
+    const matchParams = [name, name, form, form]
     const matchSql = `FROM drug_catalog
-      WHERE LOWER(TRIM(label)) = LOWER(TRIM(?))
+      WHERE (LOWER(TRIM(label)) = LOWER(TRIM(?)) OR LOWER(TRIM(full_name)) = LOWER(TRIM(?)))
       AND (? = '' OR LOWER(TRIM(form)) = LOWER(TRIM(?)))`
     const exactMatch = db.prepare(`SELECT 1 ${matchSql} LIMIT 1`, matchParams)
     const catalogDrugExists = exactMatch.step()
@@ -1103,10 +1220,21 @@ function getDrugPropertiesForMedication(medication) {
       AND properties IS NOT NULL`, matchParams)
     const result = mergePropertyRows(stmt)
     stmt.free()
-    if (catalogDrugExists) return result
+    if (catalogDrugExists) return addDrugCatalogMetadata(result, db.prepare(`SELECT karisimMi, mixture_content ${matchSql} LIMIT 1`, matchParams))
   }
 
   return getDrugProperties(medication?.activeIngredient || '')
+}
+
+function addDrugCatalogMetadata(properties, stmt) {
+  let metadata = null
+  if (stmt.step()) metadata = stmt.getAsObject()
+  stmt.free()
+  if (!metadata) return properties
+  const result = properties ? { ...properties } : {}
+  if (metadata.karisimMi) result._karisimMi = true
+  if (String(metadata.mixture_content || '').trim()) result._mixtureContent = String(metadata.mixture_content).trim()
+  return Object.keys(result).length ? result : null
 }
 
 function getPatientDrugBarcodes(patientId) {
